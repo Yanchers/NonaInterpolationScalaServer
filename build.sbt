@@ -16,4 +16,11 @@ libraryDependencies ++= Seq(
   "io.circe"        %% "circe-generic"       % CirceVersion,
 )
 
-libraryDependencies += "info.folone" %% "poi-scala" % "0.23"
+libraryDependencies += "org.apache.poi" % "poi-ooxml" % "5.2.3"
+
+libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.7"
+libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.4.7" % Runtime
+
+
+
+

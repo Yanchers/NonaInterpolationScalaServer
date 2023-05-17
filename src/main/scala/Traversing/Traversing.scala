@@ -1,6 +1,6 @@
 package Traversing
 
-import cats.{Applicative, Monad}
+import cats.{Applicative, Foldable, Functor, Monad}
 
 import java.util.concurrent.Executors
 import scala.concurrent.{ExecutionContext, Future}
@@ -47,8 +47,52 @@ object Traversing {
   val pairs1 = listSequence(List(Vector(1,2), Vector(3,4)))
   val pairs2 = listSequence(List(Vector(1,2), Vector(3,4), Vector(5,6)))
 
+  import cats.instances.option._
+  def filterAsOption(list: List[Int])(predicate: Int => Boolean): Option[List[Int]] =
+    listTraverse1[Option, Int, Int](list)(n => Some(n).filter(predicate))
+  // TODO 4
+  val allTrue = filterAsOption(List(2,4,6))(_ % 2 == 0)
+  val someFalse = filterAsOption(List(1,2,3))(_ % 2 == 0)
+
+  import cats.data.Validated
+  type ErrorsOr[T] = Validated[List[String], T]
+  def filterAsValidated(list: List[Int])(predicate: Int => Boolean): ErrorsOr[List[Int]] =
+    listTraverse1[ErrorsOr, Int, Int](list) { n =>
+      if (predicate(n)) Validated.valid(n)
+      else Validated.invalid(List(s"Predicate for $n is false"))
+    }
+
+  // TODO 5
+  val allTrueValidated = filterAsValidated(List(2,4,6))(_ % 2 == 0)
+  val someFalseValidated = filterAsValidated(List(1,2,3))(_ % 2 == 0)
+
+  trait MyTraverse[L[_]] extends Foldable[L] with Functor[L] {
+    def traverse[F[_] : Applicative, A, B](container: L[A])(f: A => F[B]): F[L[B]]
+    def sequence[F[_] : Applicative, A](container: L[F[A]]): F[L[A]] =
+      traverse(container)(identity)
+
+    // TODO 6
+    import cats.Id
+    def map[A, B](wa: L[A])(f: A => B): L[B] =
+      traverse[Id, A, B](wa)(f)
+  }
+
+  import cats.Traverse
+  import cats.instances.future._
+  val allBandwidthsCats = Traverse[List].traverse(servers)(getBandwidth)
+
+  // extension methods
+  import cats.syntax.traverse._ // sequence + traverse
+  val allBandwidthsCats2 = servers.traverse(getBandwidth)
+
+
+
   def main(args: Array[String]): Unit = {
     println(pairs1)
     println(pairs2)
+    println(allTrue)
+    println(someFalse)
+    println(allTrueValidated)
+    println(someFalseValidated)
   }
 }
