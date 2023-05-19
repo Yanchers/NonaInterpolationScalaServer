@@ -24,6 +24,9 @@ import model.InterpolationErrors.InterpolationOutOfBoundsError
 
 object Http4sServer extends IOApp {
   private val excelFilesDirectoryPath = fs2.io.file.Path(System.getProperty("user.dir") + "/files")
+  private def createWorkbookResource(file: java.io.File) =
+    Resource.fromAutoCloseable[IO, Workbook](IO(WorkbookFactory.create(file)))
+
   def excelRoutes(): HttpRoutes[IO] = {
     val dsl = new Http4sDsl[IO] {}
     import dsl._
@@ -34,6 +37,29 @@ object Http4sServer extends IOApp {
           .map(_.fileName.toString)
           .compile.toList
           .flatMap(l => Ok(l.asJson))
+      case GET -> Root / "files" / filename =>
+        val rowsIO = for {
+          file <- IO.pure(new java.io.File((excelFilesDirectoryPath / fs2.io.file.Path(filename)).absolute.toString))
+          wbRes <- IO.pure(createWorkbookResource(file))
+          rows <- wbRes.use { wb =>
+            IO {
+              val sheet = wb.getSheetAt(0)
+              sheet.asScala.toList
+                .map(_.asScala.filter(_.getCellType != CellType.BLANK).map { c =>
+                  c.getCellType match {
+                    case CellType.NUMERIC =>
+                      c.getNumericCellValue.toString
+                    case CellType.STRING =>
+                      c.getStringCellValue
+                    case _ =>
+                      ""
+                  }
+                }.toList)
+            }
+          }
+        } yield rows
+        rowsIO.flatMap(r => Ok(r.asJson))
+
       case req@POST -> Root / "upload" =>
         val fileWriteIO = for {
           mp <- req.as[Multipart[IO]]
@@ -69,7 +95,7 @@ object Http4sServer extends IOApp {
           linearData <- req.as[LinearInterpolationRequest]
           _ <- IO.println(s"data: $linearData")
           file <- IO(new java.io.File((excelFilesDirectoryPath / fileName).absolute.toString))
-          wbRes = Resource.fromAutoCloseable[IO, Workbook](IO(WorkbookFactory.create(file)))
+          wbRes = createWorkbookResource(file)
           res <- wbRes.use { wb =>
             for {
               sheet <- IO(wb.getSheetAt(0))
